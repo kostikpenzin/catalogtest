@@ -1,0 +1,19 @@
+###> symfony/framework-bundle ###
+/.env.local
+/.env.local.php
+/.env.*.local
+/config/secrets/prod/prod.decrypt.private.php
+/public/bundles/
+/var/
+/vendor/
+###< symfony/framework-bundle ###
+
+# OS / IDE noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local dev tools output
+/tools/*.bak
+/var/pdf-debug.log
