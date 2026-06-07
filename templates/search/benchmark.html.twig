@@ -1,0 +1,132 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Benchmark report — Tariff catalog{% endblock %}
+
+{% block body %}
+<style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 2rem auto; max-width: 1100px; padding: 0 1rem; color: #1a1a1a; }
+    h1 { font-size: 1.6rem; margin-bottom: 0.3rem; }
+    h2 { font-size: 1.15rem; margin-top: 2rem; border-bottom: 1px solid #e5e5e5; padding-bottom: 0.3rem; }
+    .meta { color: #666; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .meta code { background: #f3f3f3; padding: 1px 4px; border-radius: 3px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; font-size: 0.92rem; }
+    th, td { padding: 0.5rem 0.7rem; border-bottom: 1px solid #e5e5e5; text-align: left; vertical-align: top; }
+    th { background: #f6f6f6; font-weight: 600; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .winner { background: #ecfdf5; font-weight: 600; }
+    .notice { padding: 1rem; background: #fff7e6; border: 1px solid #fbcc7a; border-radius: 4px; }
+    pre { background: #0f172a; color: #e2e8f0; padding: 0.8rem; border-radius: 4px; overflow-x: auto; font-size: 0.78rem; line-height: 1.35; white-space: pre-wrap; }
+    details { margin-bottom: 0.4rem; }
+    summary { cursor: pointer; font-weight: 500; }
+    .small { font-size: 0.85rem; color: #555; }
+    .links a { margin-right: 1rem; }
+</style>
+
+<h1>Каталог тарифов — отчёт бенчмарка</h1>
+
+<p class="meta links">
+    <a href="{{ path('search') }}">/search</a>
+    <a href="/search/run?plan=1" target="_blank">/search/run</a>
+    <a href="{{ path('benchmark_pdf') }}" target="_blank">Скачать PDF</a>
+    <span class="small">Источник данных: <code>{{ path }}</code></span>
+</p>
+
+{% if not exists %}
+    <div class="notice">
+        Файл <code>{{ path }}</code> не найден. Запустите в консоли хоста:
+        <pre>docker compose exec php php bin/console app:benchmark -i 5</pre>
+    </div>
+{% else %}
+    {% set s = data %}
+    <p class="meta">
+        Сгенерировано: <strong>{{ s.timestamp }}</strong>;
+        итераций: <strong>{{ s.iterations }}</strong>;
+        условий: <strong>100</strong>
+        (bool: {{ s.criteria_summary.bool }}, int: {{ s.criteria_summary.int }}, string: {{ s.criteria_summary.string }}).
+    </p>
+
+    <h2>Одиночный прогон (cold)</h2>
+    {% set snapMin = null %}
+    {% for name, r in s.snapshot %}
+        {% if snapMin is null or r.time_ms < snapMin %}{% set snapMin = r.time_ms %}{% endif %}
+    {% endfor %}
+    <table>
+        <thead>
+        <tr>
+            <th>Реализация</th>
+            <th class="num">Время, мс</th>
+            <th class="num">Строк</th>
+            <th class="num">Размер таблицы</th>
+            <th class="num">vs лучший</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for name, r in s.snapshot %}
+            {% set ratio = (r.time_ms / snapMin)|round(2) %}
+            <tr class="{{ ratio == 1.0 ? 'winner' : '' }}">
+                <td>{{ name }}</td>
+                <td class="num">{{ '%.2f'|format(r.time_ms) }}</td>
+                <td class="num">{{ r.rows }}</td>
+                <td class="num">{{ r.count_total }}</td>
+                <td class="num">{{ ratio }}×</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>Процентили ({{ s.iterations }} итераций)</h2>
+    {% set pMin = null %}
+    {% for name, st in s.stats %}
+        {% if pMin is null or st.p50 < pMin %}{% set pMin = st.p50 %}{% endif %}
+    {% endfor %}
+    <table>
+        <thead>
+        <tr>
+            <th>Реализация</th>
+            <th class="num">p50, мс</th>
+            <th class="num">p95, мс</th>
+            <th class="num">max, мс</th>
+            <th class="num">mean, мс</th>
+            <th class="num">vs лучший (p50)</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for name, st in s.stats %}
+            {% set ratio = (st.p50 / pMin)|round(2) %}
+            <tr class="{{ ratio == 1.0 ? 'winner' : '' }}">
+                <td>{{ name }}</td>
+                <td class="num">{{ '%.2f'|format(st.p50) }}</td>
+                <td class="num">{{ '%.2f'|format(st.p95) }}</td>
+                <td class="num">{{ '%.2f'|format(st.max) }}</td>
+                <td class="num">{{ '%.2f'|format(st.mean) }}</td>
+                <td class="num">{{ ratio }}×</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>Размер таблиц</h2>
+    <table>
+        <thead>
+        <tr><th>Отношение</th><th class="num">Размер</th></tr>
+        </thead>
+        <tbody>
+        {% for k, v in s.sizes %}
+            <tr>
+                <td>{{ k }}</td>
+                <td class="num">{{ v|human_bytes }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>SQL и EXPLAIN по реализациям</h2>
+    {% for name, r in s.snapshot %}
+        <h3 style="margin-top:1.2rem;">{{ name }} <span class="small">({{ '%.2f'|format(r.time_ms) }} мс, {{ r.rows }} строк)</span></h3>
+        <details><summary>SQL</summary><pre>{{ r.sql }}</pre></details>
+        {% if r.plan %}
+            <details><summary>EXPLAIN ANALYZE</summary><pre>{{ r.plan }}</pre></details>
+        {% endif %}
+    {% endfor %}
+{% endif %}
+{% endblock %}
