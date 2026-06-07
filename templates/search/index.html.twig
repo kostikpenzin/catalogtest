@@ -1,0 +1,310 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}Каталог тарифов — OR-поиск по 100 свойствам{% endblock %}
+
+{% block body %}
+{% set report = report|default(null) %}
+{% set seeding = seeding|default(null) %}
+<style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 2rem auto; max-width: 1100px; padding: 0 1rem; color: #1a1a1a; }
+    h1 { font-size: 1.6rem; margin-bottom: 0.3rem; }
+    h2 { font-size: 1.2rem; margin-top: 2rem; border-bottom: 1px solid #e5e5e5; padding-bottom: 0.3rem; }
+    h3 { font-size: 1.0rem; margin-top: 1.2rem; }
+    .meta { color: #666; font-size: 0.9rem; margin-bottom: 1.5rem; }
+    .actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: center; }
+    button { padding: 0.6rem 1.1rem; font-size: 0.95rem; cursor: pointer; border: 1px solid #333; background: #fff; border-radius: 4px; }
+    button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+    button:disabled { opacity: 0.5; cursor: progress; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1rem; font-size: 0.92rem; }
+    th, td { padding: 0.5rem 0.7rem; border-bottom: 1px solid #e5e5e5; text-align: left; vertical-align: top; }
+    th { background: #f6f6f6; font-weight: 600; }
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .winner { background: #ecfdf5; font-weight: 600; }
+    pre { background: #0f172a; color: #e2e8f0; padding: 0.8rem; border-radius: 4px; overflow-x: auto; font-size: 0.78rem; line-height: 1.35; }
+    .sql-block { margin: 0.5rem 0 1rem; }
+    details { margin-bottom: 0.5rem; }
+    summary { cursor: pointer; font-weight: 500; }
+    .small { font-size: 0.8rem; color: #555; }
+    .links a { margin-right: 1rem; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-top: 0.5rem; }
+    .card { border: 1px solid #e5e5e5; border-radius: 6px; padding: 0.9rem 1rem; background: #fafafa; }
+    .card h3 { margin: 0 0 0.4rem 0; font-size: 1.05rem; }
+    .card .tag { display: inline-block; font-size: 0.7rem; background: #e5e5e5; color: #444; padding: 1px 6px; border-radius: 3px; margin-right: 4px; }
+    .tag { display: inline-block; font-size: 0.7rem; background: #e5e5e5; color: #444; padding: 1px 6px; border-radius: 3px; margin-left: 4px; }
+    .pros, .cons { font-size: 0.88rem; padding-left: 1.1rem; margin: 0.3rem 0; }
+    .pros li { color: #1a6b3c; }
+    .cons li { color: #8a3a3a; }
+    .schema-block { background: #fff; border: 1px solid #eee; border-radius: 4px; padding: 0.6rem; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.78rem; white-space: pre; overflow-x: auto; }
+</style>
+
+<h1>Каталог тарифов — OR-поиск (бенчмарк)</h1>
+<p class="meta links">
+    <a href="{{ path('benchmark') }}">/benchmark</a>
+    <a href="{{ path('benchmark_pdf') }}" target="_blank">Скачать PDF</a>
+</p>
+<p class="meta">
+    Сравниваются три способа хранить «тариф + 100 свойств» в PostgreSQL 16 и искать по OR-предикату на каждом из 100 свойств.
+    На каждый тариф — 70 логических флагов, 20 целых и 10 строк (фиксированный словарь ключей, общий для всех реализаций).
+    Запрос: <code>{{ criteria_count }}</code> условий, объединённых через OR
+    (bool: {{ criteria_summary.bool }}, int: {{ criteria_summary.int }}, string: {{ criteria_summary.string }}).
+    Целевой объём: 1 000 000 тарифов в каждой реализации; <code>LIMIT 1000</code> в запросе.
+</p>
+
+<h2>Сводка по тестам</h2>
+
+{% if report is null and seeding is null %}
+    <p class="small">Не найдено ни одного отчёта. Запустите сидер и бенчмарк:</p>
+    <pre>docker compose exec php php bin/console app:seed-catalog --variant=flat --truncate
+docker compose exec php php bin/console app:seed-catalog --variant=rel --truncate
+docker compose exec php php bin/console app:seed-catalog --variant=jsonb --truncate
+docker compose exec php php bin/console app:benchmark -i 5</pre>
+{% else %}
+    {% set r = report %}
+    {% set se = seeding %}
+    {% set allVariants = ['flat', 'rel', 'jsonb'] %}
+    {% set order = r is not null and r.stats is defined ? r.stats|keys : allVariants %}
+    {% set pMin = null %}
+    {% if r is not null and r.stats is defined %}
+        {% for name, st in r.stats %}{% if pMin is null or st.p50 < pMin %}{% set pMin = st.p50 %}{% endif %}{% endfor %}
+    {% endif %}
+    <table>
+        <thead>
+        <tr>
+            <th rowspan="2">Реализация</th>
+            <th rowspan="2" class="num">Тарифов в БД</th>
+            <th colspan="2" class="num">Запись (сидер)</th>
+            <th colspan="2" class="num">Объём на диске</th>
+            <th colspan="3" class="num">OR-поиск</th>
+            <th rowspan="2" class="num">Первый прогон, мс</th>
+        </tr>
+        <tr>
+            <th class="num">Время</th>
+            <th class="num">Строк/с</th>
+            <th class="num">Тарифы</th>
+            <th class="num">+ значения</th>
+            <th class="num">p50, мс</th>
+            <th class="num">p95, мс</th>
+            <th class="num">max, мс</th>
+        </tr>
+        </thead>
+        <tbody>
+        {% for name in order %}
+            {% set st = r.stats[name] ?? null %}
+            {% set snap = r.snapshot[name] ?? null %}
+            {% set seEntry = se[name] ?? null %}
+            {% set sizes = r.sizes ?? {} %}
+            {% set mainTableSize = sizes[name] ?? 0 %}
+            {% set valueTableSize = sizes['rel_value'] ?? 0 %}
+            {% set ratio = (st is not null and pMin) ? (st.p50 / pMin)|round(2) : null %}
+            <tr class="{{ ratio == 1.0 ? 'winner' : '' }}">
+                <td>
+                    {{ name }}
+                    {% if ratio == 1.0 %}<span class="tag" style="background:#ecfdf5;color:#1a6b3c;">лидер</span>{% endif %}
+                </td>
+                <td class="num">{{ snap ? snap.count_total|number_format(0, '.', ' ') : '—' }}</td>
+                <td class="num">
+                    {% if seEntry %}
+                        {{ '%.1f'|format(seEntry.elapsed_ms / 1000) }} с
+                    {% else %}—{% endif %}
+                </td>
+                <td class="num">
+                    {% if seEntry %}{{ seEntry.rows_per_sec|number_format(0, '.', ' ') }}{% else %}—{% endif %}
+                </td>
+                <td class="num">{{ mainTableSize ? mainTableSize|human_bytes : '—' }}</td>
+                <td class="num">
+                    {% if name == 'rel' and valueTableSize %}
+                        + {{ valueTableSize|human_bytes }}
+                    {% else %}—{% endif %}
+                </td>
+                <td class="num">{{ st ? '%.2f'|format(st.p50) : '—' }}</td>
+                <td class="num">{{ st ? '%.2f'|format(st.p95) : '—' }}</td>
+                <td class="num">{{ st ? '%.2f'|format(st.max) : '—' }}</td>
+                <td class="num">{{ snap ? '%.2f'|format(snap.time_ms) : '—' }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% if se is null %}
+        <p class="small" style="margin-top:0.6rem; color:#8a3a3a;">
+            ⚠ <code>var/seeding.json</code> не найден — статистика сидера (время/строк·с⁻¹) недоступна.
+            Запустите сидер, чтобы заполнить:
+        </p>
+        <pre style="background:#0f172a;color:#e2e8f0;padding:0.6rem;border-radius:4px;font-size:0.78rem;margin-top:0.4rem;">docker compose exec php php bin/console app:seed-catalog --variant=flat --truncate
+docker compose exec php php bin/console app:seed-catalog --variant=rel --truncate
+docker compose exec php php bin/console app:seed-catalog --variant=jsonb --truncate</pre>
+    {% endif %}
+    <p class="small" style="margin-top:0.5rem;">
+        «Запись» — время сидера (bulk-INSERT батчами по 1 000 тарифов, общий RNG, одинаковые данные во всех реализациях).
+        «Объём» — размер таблицы тарифов и, для EAV, отдельной таблицы значений.
+        «p50 / p95 / max» — статистика по {{ r.iterations ?? '—' }} повторам OR-поиска по всем 100 свойствам; победитель по p50 подсвечен.
+        Подробный разбор и EXPLAIN ANALYZE — на странице <a href="{{ path('benchmark') }}">/benchmark</a>.
+    </p>
+{% endif %}
+
+<h2>О реализациях</h2>
+<div class="cards">
+    <div class="card">
+        <h3>R1 — <code>tariff_flat</code> <span class="tag">wide row</span></h3>
+        <p class="small">Одна таблица, 102 колонки: <code>id</code>, <code>name</code> + 70 <code>BOOLEAN</code>, 20 <code>INTEGER</code>, 10 <code>VARCHAR(64)</code>. Кроме PRIMARY KEY других индексов нет.</p>
+        <div class="schema-block">tariff_flat (
+  id            SERIAL    PK,
+  name          VARCHAR(64),
+  p_b_001..070  BOOLEAN   × 70,
+  p_i_001..020  INTEGER   × 20,
+  p_s_001..010  VARCHAR(64) × 10
+)</div>
+        <p class="small" style="margin-top:0.5rem;">Форма запроса (фрагмент WHERE):</p>
+        <pre>WHERE p_b_001 IS TRUE
+   OR p_b_002 IS TRUE
+   OR ...
+   OR p_i_001 = :v
+   OR p_s_001 = :v
+LIMIT 1000</pre>
+        <ul class="pros">
+            <li>Один последовательный scan; минимум overhead.</li>
+            <li>Никаких JOIN и распаковок JSONB.</li>
+            <li>Предсказуемый линейный рост от объёма.</li>
+        </ul>
+        <ul class="cons">
+            <li>Жёсткая схема: добавить свойство = ALTER TABLE.</li>
+            <li>Широкая строка → TOAST overhead при больших полях.</li>
+            <li>Без вторичных индексов точечные выборки медленные.</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h3>R2 — EAV <span class="tag">related tables</span></h3>
+        <p class="small">Три таблицы: <code>tariff_rel</code> (1M родительских строк), <code>tariff_property</code> (словарь из 100 свойств), <code>tariff_value</code> (100M дочерних строк, по 100 на каждый тариф).</p>
+        <div class="schema-block">tariff_rel (id, name)
+tariff_property (id, code UQ, value_type)
+tariff_value (
+  id BIGSERIAL, tariff_id FK,
+  property_id FK,
+  value_bool BOOL?, value_int INT?,
+  value_string VARCHAR(64)?
+)
+-- idx_tv_tariff     (tariff_id)
+-- idx_tv_prop_int   (property_id, value_int)
+-- idx_tv_prop_str   (property_id, value_string)</div>
+        <p class="small" style="margin-top:0.5rem;">Форма запроса — UNION трёх подзапросов по типу значения:</p>
+        <pre>SELECT ... FROM tariff_value tv
+JOIN tariff_rel t ON t.id = tv.tariff_id
+WHERE property_id = (
+    SELECT id FROM tariff_property
+    WHERE code = :f001
+) AND value_bool IS TRUE
+UNION
+... (по 20 int)
+UNION
+... (по 10 string)
+LIMIT 1000</pre>
+        <ul class="pros">
+            <li>Схема гибкая: новые свойства = новая строка в <code>tariff_property</code>.</li>
+            <li>Потенциально хорош на точечных выборках (по одному ключу).</li>
+        </ul>
+        <ul class="cons">
+            <li>×100 строк на каждый тариф → большой объём и много I/O.</li>
+            <li>OR по 100 ключам вынуждает планировщик сканировать почти всю <code>tariff_value</code> + dedup через <code>UNION</code>.</li>
+            <li>JOIN к родителю добавляет лишний проход.</li>
+        </ul>
+    </div>
+
+    <div class="card">
+        <h3>R3 — <code>tariff_jsonb</code> <span class="tag">JSONB + GIN</span></h3>
+        <p class="small">Одна таблица, два «статичных» поля + JSONB-объект со 100 фиксированными ключами. Поверх <code>props</code> создан GIN-индекс <code>jsonb_path_ops</code>.</p>
+        <div class="schema-block">tariff_jsonb (
+  id    SERIAL    PK,
+  name  VARCHAR(64),
+  props JSONB     NOT NULL
+)
+-- idx_tariff_jsonb_props
+--   USING GIN (props jsonb_path_ops)</div>
+        <p class="small" style="margin-top:0.5rem;">Форма запроса (фрагмент WHERE):</p>
+        <pre>WHERE (props->>'f001')::boolean IS TRUE
+   OR (props->>'f002')::boolean IS TRUE
+   OR ...
+   OR (props->>'i001')::int = :v
+   OR (props->>'s001') = :v
+LIMIT 1000</pre>
+        <ul class="pros">
+            <li>Свойства добавляются без миграций.</li>
+            <li>Удобно для «схема-легке» данных и ad-hoc фильтров.</li>
+            <li>GIN помогает, если искать через <code>props @&gt; '{...}'</code>.</li>
+        </ul>
+        <ul class="cons">
+            <li>На <code>props-&gt;&gt;'key'</code> GIN не работает: индекс не ускоряет сравнение через <code>-&gt;&gt;</code>.</li>
+            <li>Каждое обращение к ключу требует парсинга JSONB.</li>
+            <li>Функциональные индексы на <code>((props-&gt;&gt;'...')::type)</code> съедают смысл «без схемы».</li>
+        </ul>
+    </div>
+</div>
+
+<h2>Методика</h2>
+<ul>
+    <li>Один и тот же детерминированный сидер (<code>Mt19937(20260607)</code>) заполняет все три таблицы, поэтому id и значения свойств совпадают между реализациями.</li>
+    <li>Замер времени — <code>hrtime()</code> вокруг <code>executeQuery</code> в PHP плюс <code>performance.now()</code> в браузере.</li>
+    <li><code>EXPLAIN (ANALYZE, BUFFERS)</code> показывает фактический план PG: <code>Seq Scan</code> vs <code>Bitmap Heap Scan</code> vs <code>HashAggregate</code>.</li>
+    <li>CLI-вариант: <code>app:benchmark -i 5</code> — пишет <code>var/benchmark.json</code> и <code>var/benchmark-report.md</code>; результаты показаны на <a href="{{ path('benchmark') }}">/benchmark</a>.</li>
+</ul>
+
+<div class="actions">
+    <button class="primary" id="run-btn">Прогнать все 3 реализации</button>
+    <label class="small"><input type="checkbox" id="with-plan" checked> Включить EXPLAIN ANALYZE</label>
+    <span class="small" id="status"></span>
+</div>
+
+<div id="results"></div>
+
+<script>
+    const btn = document.getElementById('run-btn');
+    const status = document.getElementById('status');
+    const results = document.getElementById('results');
+
+    function escape(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+    btn.addEventListener('click', async () => {
+        btn.disabled = true; status.textContent = 'Выполняется…';
+        const t0 = performance.now();
+        const plan = document.getElementById('with-plan').checked ? '1' : '0';
+        try {
+            const resp = await fetch('/search/run?plan=' + plan);
+            const data = await resp.json();
+            const t1 = performance.now();
+            status.textContent = 'Готово за ' + (t1 - t0).toFixed(1) + ' мс (браузер)';
+            render(data);
+        } catch (e) {
+            status.textContent = 'Ошибка: ' + e.message;
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    function render(data) {
+        const variants = data.variants;
+        const min = Math.min(...Object.values(variants).map(v => v.time_ms));
+        let html = '<table><thead><tr><th>Реализация</th><th class="num">Найдено строк</th><th class="num">Всего в таблице</th><th class="num">Время, мс</th><th class="num">vs лучший</th></tr></thead><tbody>';
+        for (const [name, v] of Object.entries(variants)) {
+            const cls = v.time_ms === min ? 'winner' : '';
+            const ratio = (v.time_ms / min).toFixed(2);
+            html += `<tr class="${cls}">
+                <td>${name}</td>
+                <td class="num">${v.rows.toLocaleString()}</td>
+                <td class="num">${v.count_total.toLocaleString()}</td>
+                <td class="num">${v.time_ms.toFixed(2)}</td>
+                <td class="num">${ratio}×</td>
+            </tr>`;
+        }
+        html += '</tbody></table>';
+
+        for (const [name, v] of Object.entries(variants)) {
+            html += `<div class="sql-block"><strong>${name}</strong> — ${v.time_ms.toFixed(2)} мс, ${v.rows} строк`;
+            html += `<details><summary>SQL</summary><pre>${escape(v.sql)}</pre></details>`;
+            if (v.plan) {
+                html += `<details><summary>EXPLAIN ANALYZE</summary><pre>${escape(v.plan)}</pre></details>`;
+            }
+            html += '</div>';
+        }
+        results.innerHTML = html;
+    }
+</script>
+{% endblock %}
