@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}CatalogTest — Главная{% endblock %}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #1a202c;
+            padding: 32px 20px 64px;
+        }
+        .container { max-width: 1240px; margin: 0 auto; }
+
+        .hero {
+            background: rgba(255,255,255,0.95);
+            border-radius: 20px;
+            padding: 36px 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+            margin-bottom: 28px;
+        }
+        .hero h1 {
+            font-size: 2.2rem;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+        .hero p { color: #4a5568; line-height: 1.6; max-width: 720px; }
+        .badges { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px; }
+        .badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea22, #764ba222);
+            color: #5a3d99;
+            padding: 5px 12px;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+
+        .section-title {
+            color: #fff;
+            font-size: 1.15rem;
+            font-weight: 600;
+            margin: 28px 0 14px;
+            padding-left: 8px;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.15);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+        .card-link {
+            display: block;
+            text-decoration: none;
+            color: inherit;
+            background: rgba(255,255,255,0.97);
+            border-radius: 16px;
+            padding: 22px 24px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+            transition: transform 0.18s ease, box-shadow 0.18s ease;
+            border: 1px solid rgba(255,255,255,0.3);
+        }
+        .card-link:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 14px 36px rgba(0,0,0,0.28);
+        }
+        .card-link .icon {
+            width: 44px; height: 44px;
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.4rem;
+            margin-bottom: 12px;
+            color: #fff;
+        }
+        .icon-blue   { background: linear-gradient(135deg, #667eea, #4a5fcf); }
+        .icon-green  { background: linear-gradient(135deg, #10b981, #059669); }
+        .icon-purple { background: linear-gradient(135deg, #8b5cf6, #6d28d9); }
+        .icon-orange { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        .icon-pink   { background: linear-gradient(135deg, #ec4899, #be185d); }
+        .icon-teal   { background: linear-gradient(135deg, #14b8a6, #0d9488); }
+        .icon-red    { background: linear-gradient(135deg, #ef4444, #b91c1c); }
+        .icon-indigo { background: linear-gradient(135deg, #6366f1, #4338ca); }
+        .card-link h3 { font-size: 1.05rem; margin-bottom: 6px; color: #1a202c; }
+        .card-link p  { font-size: 0.88rem; color: #4a5568; line-height: 1.5; }
+        .card-link .url {
+            display: inline-block;
+            margin-top: 10px;
+            font-family: "SFMono-Regular", Consolas, monospace;
+            font-size: 0.78rem;
+            color: #667eea;
+            background: #f3f4ff;
+            padding: 3px 8px;
+            border-radius: 6px;
+        }
+
+        .quick-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 16px;
+        }
+        .qa-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 9px 16px;
+            background: rgba(255,255,255,0.15);
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 999px;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: background 0.15s ease;
+        }
+        .qa-btn:hover { background: rgba(255,255,255,0.28); }
+
+        pre.cmd {
+            background: rgba(0,0,0,0.35);
+            color: #e2e8f0;
+            padding: 12px 16px;
+            border-radius: 10px;
+            font-family: "SFMono-Regular", Consolas, monospace;
+            font-size: 0.82rem;
+            overflow-x: auto;
+            margin-top: 12px;
+            line-height: 1.6;
+        }
+        pre.cmd b { color: #fbbf24; }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+            margin-top: 14px;
+        }
+        .stat {
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 12px;
+            padding: 12px 14px;
+            color: #fff;
+            text-align: center;
+        }
+        .stat .v { font-size: 1.4rem; font-weight: 700; }
+        .stat .l { font-size: 0.75rem; opacity: 0.85; margin-top: 2px; }
+
+        footer {
+            margin-top: 40px;
+            text-align: center;
+            color: rgba(255,255,255,0.7);
+            font-size: 0.82rem;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <div class="hero">
+        <h1>📊 CatalogTest — панель управления</h1>
+        <p>
+            Бенчмарк каталога тарифов: сравнение трёх схем хранения
+            (<b>flat</b> — широкая таблица, <b>rel</b> — EAV, <b>jsonb</b> — JSONB + GIN)
+            на 100 свойствах (70 bool + 20 int + 10 string) и до 1 000 000 тарифов.
+        </p>
+        <div class="badges">
+            <span class="badge">PHP {{ constant('PHP_VERSION') }}</span>
+            <span class="badge">Symfony {{ constant('Symfony\\Component\\HttpKernel\\Kernel::VERSION') }}</span>
+            <span class="badge">PostgreSQL 16</span>
+            <span class="badge">FrankenPHP</span>
+            <span class="badge">Doctrine ORM</span>
+        </div>
+
+        <div class="stats">
+            <div class="stat"><div class="v">3</div><div class="l">схемы БД</div></div>
+            <div class="stat"><div class="v">100</div><div class="l">свойств</div></div>
+            <div class="stat"><div class="v">70/20/10</div><div class="l">bool/int/string</div></div>
+            <div class="stat"><div class="v">≤ 1M</div><div class="l">тарифов</div></div>
+        </div>
+    </div>
+
+    <div class="section-title">🌐 Веб-интерфейс</div>
+    <div class="grid">
+
+        <a class="card-link" href="/search">
+            <div class="icon icon-blue">🔍</div>
+            <h3>Поиск тарифов</h3>
+            <p>CRITERIA-генератор и OR-поиск по всем трём схемам. Сводный отчёт по времени выполнения.</p>
+            <span class="url">/search</span>
+        </a>
+
+        <a class="card-link" href="/search/run?plan=1">
+            <div class="icon icon-green">⚡</div>
+            <h3>Запуск бенчмарка (API)</h3>
+            <p>JSON-эндпоинт: прогоняет OR-поиск по flat/rel/jsonb и возвращает SQL + EXPLAIN ANALYZE.</p>
+            <span class="url">/search/run?plan=1</span>
+        </a>
+
+        <a class="card-link" href="/benchmark">
+            <div class="icon icon-purple">📈</div>
+            <h3>Дашборд бенчмарка</h3>
+            <p>Снимок последнего прогона: p50/p95/max, размеры таблиц, критерии.</p>
+            <span class="url">/benchmark</span>
+        </a>
+
+        <a class="card-link" href="/benchmark.pdf">
+            <div class="icon icon-orange">📄</div>
+            <h3>PDF-отчёт</h3>
+            <p>Скачиваемый PDF с результатами последнего бенчмарка (snapshot + статистика).</p>
+            <span class="url">/benchmark.pdf</span>
+        </a>
+
+        <a class="card-link" href="/health">
+            <div class="icon icon-teal">💚</div>
+            <h3>Health-check</h3>
+            <p>Статус приложения и БД в JSON-формате. Подходит для мониторинга.</p>
+            <span class="url">/health</span>
+        </a>
+
+        <a class="card-link" href="/api/criteria">
+            <div class="icon icon-pink">🎯</div>
+            <h3>Критерии поиска</h3>
+            <p>Сгенерированный набор критериев: bool/int/string-условия + сводка.</p>
+            <span class="url">/api/criteria</span>
+        </a>
+
+    </div>
+
+    <div class="section-title">🌱 Сидирование каталога (консольные команды)</div>
+    <div class="grid">
+
+        <div class="card-link" style="cursor:default;">
+            <div class="icon icon-green">📋</div>
+            <h3>FLAT — широкая таблица</h3>
+            <p>102 колонки: id, name + 70 bool + 20 int + 10 string. PK — единственный индекс.</p>
+            <pre class="cmd">php bin/console app:seed-catalog <b>--variant=flat</b> -c 100000 <b>--truncate</b></pre>
+        </div>
+
+        <div class="card-link" style="cursor:default;">
+            <div class="icon icon-blue">🔗</div>
+            <h3>REL — EAV (3 таблицы)</h3>
+            <p>tariff_rel (1M) + tariff_property (100) + tariff_value (100M) с индексами по типам.</p>
+            <pre class="cmd">php bin/console app:seed-catalog <b>--variant=rel</b> -c 100000 <b>--truncate</b></pre>
+        </div>
+
+        <div class="card-link" style="cursor:default;">
+            <div class="icon icon-purple">🧩</div>
+            <h3>JSONB — JSON + GIN</h3>
+            <p>tariff_jsonb: id, name, props JSONB + GIN(jsonb_path_ops) на props.</p>
+            <pre class="cmd">php bin/console app:seed-catalog <b>--variant=jsonb</b> -c 100000 <b>--truncate</b></pre>
+        </div>
+
+    </div>
+
+    <div class="section-title">🏁 Бенчмарк</div>
+    <div class="grid">
+
+        <div class="card-link" style="cursor:default;">
+            <div class="icon icon-orange">⏱️</div>
+            <h3>Запуск бенчмарка</h3>
+            <p>5 итераций по каждому варианту → var/benchmark.json + var/benchmark-report.md.</p>
+            <pre class="cmd">php bin/console app:benchmark <b>-i 5</b> -o var/benchmark.json -r var/benchmark-report.md</pre>
+        </div>
+
+        <div class="card-link" style="cursor:default;">
+            <div class="icon icon-red">🚫</div>
+            <h3>Без EXPLAIN ANALYZE</h3>
+            <p>Ускоряет прогон, если планы запросов не нужны.</p>
+            <pre class="cmd">php bin/console app:benchmark -i 5 <b>--no-plan</b></pre>
+        </div>
+
+        <div class="card-link" style="cursor:default;">
+            <div class="icon icon-indigo">🗃️</div>
+            <h3>Миграции Doctrine</h3>
+            <p>Применить миграции и подготовить схему БД с нуля.</p>
+            <pre class="cmd">php bin/console doctrine:migrations:migrate <b>-n</b></pre>
+        </div>
+
+    </div>
+
+    <div class="section-title">⚡ Быстрые действия</div>
+    <div class="hero" style="background: rgba(255,255,255,0.92);">
+        <p style="margin-bottom:10px;"><b>Открыть эндпоинты:</b></p>
+        <div class="quick-actions">
+            <a class="qa-btn" href="/search/run?plan=0" target="_blank">▶ flat + rel + jsonb</a>
+            <a class="qa-btn" href="/search/run?plan=1" target="_blank">▶ + EXPLAIN</a>
+            <a class="qa-btn" href="/health" target="_blank">💚 Health</a>
+            <a class="qa-btn" href="/benchmark" target="_blank">📊 Дашборд</a>
+            <a class="qa-btn" href="/benchmark.pdf" target="_blank">📄 PDF</a>
+        </div>
+        <p style="margin-top:18px; margin-bottom:6px;"><b>Полезные docker-команды:</b></p>
+        <pre class="cmd" style="background:#1a202c;">
+docker compose exec php php bin/console app:seed-catalog --variant=rel -c 100000 --truncate
+docker compose exec php php bin/console app:benchmark -i 5
+docker compose logs -f php
+docker compose exec postgres psql -U app -d app -c "SELECT count(*) FROM tariff_flat;"
+        </pre>
+    </div>
+
+    <footer>
+        CatalogTest · Symfony {{ constant('Symfony\\Component\\HttpKernel\\Kernel::VERSION') }} · PHP {{ constant('PHP_VERSION') }} · PostgreSQL 16<br>
+        <span style="opacity:0.7;">Endpoints: /, /health, /search, /search/run, /benchmark, /benchmark.pdf, /api/criteria</span>
+    </footer>
+
+</div>
+</body>
+</html>
